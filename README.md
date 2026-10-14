@@ -19,20 +19,20 @@ scREFINE performs:
 
 ```text
 scREFINE/
-├── scREFINE/                  # main pipeline (v2)
-│   ├── run_scREFINE.py
-│   ├── model.py
-│   ├── utils_splits.py
-│   ├── extract_scgpt_embeddings.py
-│   ├── ssd_clustering.py
-│   └── analysis/              # K-sensitivity/estimation, raw baseline, marker dotplots, UMAP figures
+├── analysis/                  # K-sensitivity/estimation, raw baseline, marker dotplots, UMAP figures
 ├── splits/                    # stratified split indices (.npz) for 5 datasets × 4 seeds
 ├── run_configs/               # launcher scripts for every experiment in the paper
 ├── baseline_patches/          # patches for scSemiAAE / scAGCL / scCCTR (original + scGPT-backbone)
 ├── results/
 │   └── results_log_v2.csv     # master log of all runs
-├── data/                      # input .h5ad files (not included; see links below)
-├── scGPT_pretrained/          # scGPT checkpoint (download; see below)
+├── data/                      # input .h5ad files (links in the paper; not included)
+├── scgpt/ , scGPT_pretrained/ # scGPT source + checkpoint (download instructions above)
+├── run_scREFINE.py            # main pipeline script
+├── model.py
+├── utils_splits.py
+├── extract_scgpt_embeddings.py
+├── ssd_clustering.py
+├── requirements.txt
 └── README.md
 ```
 
