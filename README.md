@@ -1,38 +1,42 @@
 # scREFINE
 
-scREFINE is a semi-supervised single-cell RNA-seq clustering pipeline that refines scGPT-derived cell embeddings using limited labeled cells and structure-aware neighborhood regularization.
+scREFINE is a label-efficient semi-supervised single-cell RNA-seq clustering framework that refines frozen scGPT-derived cell embeddings using only 5% labeled cells, combining supervised refinement with stability-aware soft structural regularization over local neighborhoods.
+
+Companion code for: *"scREFINE: Label-Efficient Semi-Supervised Clustering of scRNA-seq Data via Foundation-Model Embedding Refinement"* (Computational Biology and Chemistry).
 
 ## Overview
 
 scREFINE performs:
 
 1. data loading and preprocessing from `.h5ad` files;
-2. stratified labeled, unlabeled, validation, and test splitting;
-3. inductive scGPT embedding extraction;
-4. semi-supervised refinement learning;
-5. SSD-based structure-aware neighborhood regularization;
-6. clustering evaluation using ARI, NMI, AMI, and ACC.
+2. stratified splitting into labeled (exactly 5%), unlabeled, validation, and test partitions (exact indices in `splits/`);
+3. inductive scGPT embedding extraction (HVG selection, PCA, and scaling fitted on training cells only — no test information leakage);
+4. semi-supervised refinement learning (triplet, prototype, pairwise, supervised contrastive, and cross-entropy losses on labeled cells only);
+5. stability-aware soft structural regularization over training-cell neighborhoods (no hard pseudo-labels; test cells never enter the graph);
+6. K-means clustering on test cells and evaluation with ARI, NMI, AMI, and ACC (n_init = 10, mean ± SD over repeated fits).
 
 ## Project structure
 
 ```text
 scREFINE/
-├── data/
-├── result/
-├── scgpt/
-├── scGPT_pretrained/
-├── README.md
-├── requirements.txt
-├── run_scREFINE.py
-├── model.py
-├── ssd_clustering.py
-├── utils_splits.py
-└── extract_scgpt_embeddings.py
+├── scREFINE/                  # main pipeline (v2)
+│   ├── run_scREFINE.py
+│   ├── model.py
+│   ├── utils_splits.py
+│   ├── extract_scgpt_embeddings.py
+│   ├── ssd_clustering.py
+│   └── analysis/              # K-sensitivity/estimation, raw baseline, marker dotplots, UMAP figures
+├── splits/                    # stratified split indices (.npz) for 5 datasets × 4 seeds
+├── run_configs/               # launcher scripts for every experiment in the paper
+├── baseline_patches/          # patches for scSemiAAE / scAGCL / scCCTR (original + scGPT-backbone)
+├── results/
+│   └── results_log_v2.csv     # master log of all runs
+├── data/                      # input .h5ad files (not included; see links below)
+├── scGPT_pretrained/          # scGPT checkpoint (download; see below)
+└── README.md
 ```
 
 ## Installation
-
-Install the required packages:
 
 ```bash
 pip install -r requirements.txt
@@ -40,13 +44,7 @@ pip install -r requirements.txt
 
 ## scGPT files
 
-Place the scGPT source code in:
-
-```text
-scgpt/
-```
-
-Place the pretrained scGPT files in:
+Download the scGPT pretrained checkpoint from the scGPT repository and place:
 
 ```text
 scGPT_pretrained/
@@ -56,87 +54,69 @@ scGPT_pretrained/
 
 ## Input data
 
-Place input `.h5ad` files in the `data/` folder.
-
-The AnnData object should contain a cell-type label column. Supported label column names include:
-
-```text
-cell_type
-celltype
-CellType
-label
-labels
-```
-
-Example:
+Place the `.h5ad` files in the `data/` folder. The AnnData object must contain a cell-type label column (e.g., `cell_type`, `celltype`, `label`). The five benchmark datasets are publicly available (links in the paper's Data availability section):
 
 ```text
 data/Brain.h5ad
+data/Fat.h5ad
+data/Retina.h5ad
+data/Breast_carcinoma.h5ad
+data/Quadriceps_tendon.h5ad
 ```
 
-## Usage
-
-Run scREFINE with:
+## Usage (main 5%-label setting)
 
 ```bash
-python3 run_scREFINE.py \
+python3 scREFINE/run_scREFINE.py \
   --data data/Brain.h5ad \
-  --output-dir result/Brain_5pct_w01 \
-  --labeled-ratio 0.05 \
-  --seed 42 \
-  --epochs 100 \
-  --w-structure 0.1
+  --output-dir result/Brain_s42 \
+  --labeled-ratio 0.05 --seed 42 --split-seed 42 \
+  --epochs 100 --w-structure 0.1
 ```
 
-## Arguments
+## Key arguments
 
 | Argument | Description |
 |---|---|
 | `--data` | Path to the input `.h5ad` dataset. |
-| `--output-dir` | Directory where results will be saved. |
-| `--labeled-ratio` | Fraction of labeled cells used during semi-supervised training. |
-| `--seed` | Random seed for reproducibility. |
-| `--epochs` | Maximum number of training epochs. |
-| `--w-structure` | Weight of the SSD structure-aware loss. |
+| `--output-dir` | Directory where results are saved. |
+| `--labeled-ratio` | Fraction of **all** cells used as labeled (0.05 = 5%). |
+| `--seed` | Model/init seed. |
+| `--split-seed` | Data-split seed (labeled-cell selection); defaults to `--seed`. |
+| `--epochs` | Maximum training epochs (early stopping: patience 10 on validation CE). |
+| `--w-structure` | Weight of the soft structural loss (0.1 in the main experiments). |
+| `--hard-pl` | Hard pseudo-label structural variant (ablation only). |
+| `--no-graph` | Refinement-only ablation (no structure graph). |
 
 ## Output
 
-Results are saved in the specified output directory, for example:
+Each run writes `results.json` (metrics as mean ± SD over 5 K-means fits), refined embeddings (`fused_embeddings.npy`), and appends to `results/results_log_v2.csv`. Example (Brain, seed 42):
 
 ```text
-result/Brain_5pct_w01/
+TEST (mean over K-means repeats):
+   ARI: 0.8314 ± 0.0077
+   NMI: 0.8367 ± 0.0037
+   AMI: 0.8259 ± 0.0040
+   ACC: 0.8530 ± 0.0065
 ```
 
-The pipeline reports validation and test performance using:
+## Reproducing the paper
 
-```text
-ARI
-NMI
-AMI
-ACC
-```
+All experiment families (main table, loss ablation, hard-PL, label selection, low-label, weight sensitivity, label ratio, baselines) are launched by the scripts in `run_configs/`; see `run_configs/README.md` for the mapping to paper tables/figures. All baselines were evaluated on exactly the cells in `splits/`.
 
-It also reports runtime information for preprocessing, embedding extraction, training, and evaluation.
+## Note on checkpoints
 
-## Example output
-
-```text
-TEST SET RESULTS:
-   ARI:  0.8441
-   NMI:  0.8553
-   AMI:  0.8461
-   ACC:  0.8705
-```
+Training is deterministic given the published seeds and takes minutes per run on CPU; all reported results are regenerated exactly by the provided configs.
 
 ## Main files
 
 | File | Description |
 |---|---|
-| `run_scREFINE.py` | Main script for running the full scREFINE pipeline. |
-| `model.py` | Refinement head, semi-supervised loss, and training module. |
-| `ssd_clustering.py` | SSD structural layer for neighborhood graph construction and stability estimation. |
-| `utils_splits.py` | Stratified split creation, partial-label generation, and leakage checking. |
-| `extract_scgpt_embeddings.py` | Inductive scGPT embedding extraction with train-only PCA and scaling. |
+| `run_scREFINE.py` | Main pipeline script. |
+| `model.py` | Refinement head, semi-supervised losses, structure-aware trainer. |
+| `ssd_clustering.py` | Neighborhood graph construction and edge-stability estimation. |
+| `utils_splits.py` | Stratified splits, partial labels, leakage checks. |
+| `extract_scgpt_embeddings.py` | Inductive scGPT embedding extraction (train-fitted PCA/scaler). |
 
 ## Citation
 
