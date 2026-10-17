@@ -24,7 +24,8 @@ scREFINE/
 ├── run_configs/               # launcher scripts for every experiment in the paper
 ├── baseline_patches/          # patches for scSemiAAE / scAGCL / scCCTR (original + scGPT-backbone)
 ├── results/
-│   └── results_log_v2.csv     # master log of all runs
+│   ├── results_log_v2.csv     # master log of all runs
+│   └── biological_validation/ # per-cluster marker-gene tables (Brain, Breast carcinoma; Fig. 11, Table S10)
 ├── data/                      # input .h5ad files (links in the paper; not included)
 ├── scgpt/ , scGPT_pretrained/ # scGPT source + checkpoint (download instructions above)
 ├── run_scREFINE.py            # main pipeline script
